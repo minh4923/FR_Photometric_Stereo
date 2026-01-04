@@ -10,7 +10,7 @@ from .head.spectacles import SpectacleDetectModule
 from .backbone.mifr import create_miresnet
 
 from .grl import GradientReverseLayer
-
+from .backbone.convnext_v2_mifr import create_miconvnextv2
 # Đặt seed toàn cục
 seed = 42
 torch.manual_seed(seed)
@@ -20,7 +20,15 @@ class MTLFaceRecognition(torch.nn.Module):
 
     def __init__(self, backbone:str, num_classes:int):
         super(MTLFaceRecognition, self).__init__()
-        self.backbone = create_miresnet(backbone)
+        
+        # Logic chọn Backbone
+        if 'convnext' in backbone:
+             # Nếu tên backbone là 'convnextv2_tiny'
+            self.backbone = create_miconvnextv2(backbone)
+        else:
+             # Logic cũ cho miresnet
+            from .backbone.mifr import create_miresnet
+            self.backbone = create_miresnet(backbone)
         
         # Head
         self.id_head = IdRecognitionModule(num_classes)
