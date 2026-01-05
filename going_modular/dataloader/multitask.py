@@ -162,3 +162,101 @@ def create_multitask_datafetcher(config, train_transform, test_transform) -> Tup
 
 def create_concatv2_multitask_datafetcher(config, train_transform, test_transform):
     raise NotImplementedError("Fusion Task")
+
+# --- PHẦN THÊM VÀO CUỐI FILE going_modular/dataloader/multitask.py ---
+
+class ConcatPhotometricDataset(Dataset):
+    def __init__(self, csv_file, root_dir, transform=None):
+        self.df = pd.read_csv(csv_file)
+        self.root_dir = root_dir
+        self.transform = transform
+        
+        # Mapping file
+        self.file_map = {
+            'albedo': 'albedo_map_new_crop.exr.npy',
+            'normal': 'normal_map_new_crop.exr.npy'
+        }
+        
+        self.unique_ids = sorted(self.df['id'].unique())
+        self.id_to_label = {id_val: i for i, id_val in enumerate(self.unique_ids)}
+        
+        # Lưu label list để dùng cho Sampler
+        self.labels_list = []
+        for _, row in self.df.iterrows():
+            self.labels_list.append(self.id_to_label[row['id']])
+            
+        self.weightclass = {}
+
+    def __len__(self):
+        return len(self.df)
+    
+    def get_labels(self):
+        return self.labels_list
+
+    def __load_npy(self, path):
+        try:
+            img = np.load(path)
+            # Fix lỗi Depth/Normal 2D nếu có
+            if img.ndim == 2:
+                img = np.expand_dims(img, axis=-1)
+                img = np.repeat(img, 3, axis=-1)
+            elif img.ndim == 3 and img.shape[0] == 3:
+                img = img.transpose(1, 2, 0)
+            img = img.astype(np.float32)
+            return img
+        except:
+            return np.zeros((112, 112, 3), dtype=np.float32)
+
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        id_val = row['id']
+        session = str(row['session'])
+        
+        # Lấy đường dẫn cả 2 loại
+        path_albedo = os.path.join(self.root_dir, str(id_val), session, self.file_map['albedo'])
+        path_normal = os.path.join(self.root_dir, str(id_val), session, self.file_map['normal'])
+        
+        img_albedo = self.__load_npy(path_albedo)
+        img_normal = self.__load_npy(path_normal)
+        
+        # Lấy nhãn
+        label_id = self.id_to_label[id_val]
+        gender = int(row.get('Gender', 0))
+        spec = int(row.get('Spectacles', 0))
+        hair = int(row.get('Facial_Hair', 0))
+        pose = int(row.get('Pose', 0))
+        emo = int(row.get('Emotion', 0))
+        labels = torch.tensor([label_id, gender, spec, hair, pose, emo], dtype=torch.long)
+        
+        # Transform (Albumentations xử lý 2 ảnh cùng lúc)
+        if self.transform:
+            augmented = self.transform(image=img_albedo, image2=img_normal)
+            img_albedo = augmented['image']
+            img_normal = augmented['image2']
+            
+        # Convert to Tensor
+        if isinstance(img_albedo, np.ndarray):
+            img_albedo = torch.from_numpy(img_albedo).permute(2, 0, 1)
+            img_normal = torch.from_numpy(img_normal).permute(2, 0, 1)
+            
+        return img_albedo, img_normal, labels
+
+def create_concat_multitask_datafetcher(config, train_transform, test_transform):
+    dataset_dir = config['dataset_dir']
+    batch_size = config['batch_size']
+    
+    train_csv = os.path.join(dataset_dir, 'train_split.csv')
+    test_csv = os.path.join(dataset_dir, 'probe_split.csv')
+    
+    print("--- Khởi tạo Dual-Stream Dataset (Albedo + Normal) ---")
+    
+    train_ds = ConcatPhotometricDataset(train_csv, dataset_dir, train_transform)
+    test_ds = ConcatPhotometricDataset(test_csv, dataset_dir, test_transform)
+    
+    # Dùng lại UniqueIdBatchSampler thần thánh
+    train_sampler = UniqueIdBatchSampler(train_ds.get_labels(), batch_size)
+    
+    train_dl = DataLoader(train_ds, batch_sampler=train_sampler, num_workers=2, pin_memory=True)
+    test_dl = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
+    
+    return train_dl, test_dl, train_ds.weightclass
