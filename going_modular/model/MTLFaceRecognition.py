@@ -1,3 +1,4 @@
+
 import torch
 
 from .head.id import IdRecognitionModule
@@ -7,16 +8,15 @@ from .head.facialhair import FacialHairDetectModule
 from .head.pose import PoseDetectModule
 from .head.spectacles import SpectacleDetectModule
 
-from .backbone.mifr import create_miresnet
-
 from .grl import GradientReverseLayer
+# Import Backbone ConvNeXt
 from .backbone.convnext_v2_mifr import create_miconvnextv2
+
 # Đặt seed toàn cục
 seed = 42
 torch.manual_seed(seed)
 
 class MTLFaceRecognition(torch.nn.Module):
-
 
     def __init__(self, backbone:str, num_classes:int):
         super(MTLFaceRecognition, self).__init__()
@@ -51,7 +51,7 @@ class MTLFaceRecognition(torch.nn.Module):
         self.grl_facial_hair = GradientReverseLayer()
         self.grl_pose = GradientReverseLayer()
         self.grl_spectacles = GradientReverseLayer()
-       
+        
         
     def forward(self, x):
         (
@@ -89,9 +89,6 @@ class MTLFaceRecognition(torch.nn.Module):
                     x_id_logits, x_id_norm
                 )
         return logits
-    
-    
-    # Trả về các task khác như bình thường trừ id chỉ trả về embedding
     def get_result(self, x):
         (
             (x_spectacles, x_non_spectacles),

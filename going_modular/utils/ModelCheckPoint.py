@@ -1,45 +1,45 @@
-import torch
-from termcolor import cprint
-import os
 
-# Đặt seed toàn cục
-seed = 42
-torch.manual_seed(seed)
+import torch
+import os
+import shutil
 
 class ModelCheckpoint:
-    def __init__(self, filepath, verbose=0):
-        self.filepath = filepath
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        self.verbose = verbose
+    def __init__(self, output_dir, mode='min', best_metric_name='loss'):
+        self.output_dir = output_dir
+        self.mode = mode
+        self.best_metric_name = best_metric_name
+        self.best_metric_val = float('inf') if mode == 'min' else -float('inf')
 
-    def __call__(self, model, optimizer, epoch):
-        checkpoint = {
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir, exist_ok=True)
+
+    def __call__(self, model, optimizer, epoch, metrics=None, scheduler=None):
+        # 1. Luôn lưu 'last_model.pth' (Model mới nhất)
+        last_path = os.path.join(self.output_dir, 'last_model.pth')
+
+        state = {
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'best_metric_val': self.best_metric_val
         }
+        if scheduler:
+            state['scheduler_state_dict'] = scheduler.state_dict()
 
-        torch.save(checkpoint, self.filepath)
-        if self.verbose > 0:
-            cprint(f"\tSaving model and optimizer state to {self.filepath}", 'cyan')
+        torch.save(state, last_path)
 
-    def load_checkpoint(self, model, optimizer, scheduler):
-        """
-        Load checkpoint vào model, optimizer và scheduler từ file.
-        """
-        if os.path.isfile(self.filepath):
-            checkpoint = torch.load(self.filepath)
+        # 2. Kiểm tra lưu 'best_model.pth'
+        if metrics is not None and self.best_metric_name in metrics:
+            current_val = metrics[self.best_metric_name]
+            is_best = False
 
-            model.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            if scheduler:
-                scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            if self.mode == 'min':
+                if current_val < self.best_metric_val: is_best = True
+            else: # mode max
+                if current_val > self.best_metric_val: is_best = True
 
-            epoch = checkpoint['epoch']
-
-            if self.verbose > 0:
-                cprint(f"\tLoaded model and optimizer state from {self.filepath}", 'cyan')
-                cprint(f"\tResuming from epoch {epoch}", 'cyan')
-        else:
-            if self.verbose > 0:
-                cprint(f"\tNo checkpoint found at {self.filepath}. Starting from scratch.", 'red')
+            if is_best:
+                self.best_metric_val = current_val
+                best_path = os.path.join(self.output_dir, 'best_model.pth')
+                shutil.copyfile(last_path, best_path)
+                print(f"--> SAVE BEST MODEL ({self.best_metric_name}: {current_val:.4f})")

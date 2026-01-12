@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
-import timm # Thư viện chứa ConvNeXt V2 chuẩn
+import timm 
 
-# --- 1. GIỮ NGUYÊN CÁC MODULE ATTENTION CỦA BẠN ---
-# (Mình copy y nguyên từ mifr.py sang để đảm bảo logic tách feature không đổi)
-
+# --- 1. MODULE ATTENTION (GIỮ NGUYÊN) ---
 class SPPModule(nn.Module):
     def __init__(self, pool_mode='avg', sizes=(1, 2, 3, 6)):
         super().__init__()
@@ -52,51 +50,40 @@ class AttentionModule(nn.Module):
         )
 
     def forward(self, x):
-        # Attention channel
         channel_input = self.avg_spp(x) + self.max_spp(x)
         channel_scale = self.channel(channel_input)
 
-        # Attention spatial
         spatial_input = torch.cat((torch.max(x, 1)[0].unsqueeze(1), torch.mean(x, 1).unsqueeze(1)), dim=1)
         spatial_scale = self.spatial(spatial_input)
 
-        # Tách feature
         x_non_id = (x * channel_scale + x * spatial_scale) * 0.5
         x_id = x - x_non_id
         
         return x_id, x_non_id
 
-# --- 2. BACKBONE MỚI: CONVNEXT V2 TÍCH HỢP LOGIC MI ---
-
+# --- 2. BACKBONE CONVNEXT V2 ---
 class MIConvNeXtV2(nn.Module):
     def __init__(self, model_name='convnextv2_tiny', pretrained=True, **kwargs):
         super(MIConvNeXtV2, self).__init__()
         
-        # A. Load Backbone ConvNeXt V2 từ thư viện timm
-        # 'features_only=True' để lấy feature map cuối cùng (chưa qua lớp classification)
         print(f"--- Loading ConvNeXt V2: {model_name} (Pretrained={pretrained}) ---")
+        # features_only=True để lấy feature map cuối cùng
         self.backbone = timm.create_model(model_name, pretrained=pretrained, features_only=True)
         
-        # Lấy thông tin số channel đầu ra của backbone
-        # ConvNeXt Tiny/Base thường ra 768 hoặc 1024 channels
+        # Lấy thông tin channel output thực tế
         dummy_input = torch.randn(1, 3, 112, 112)
         with torch.no_grad():
             features = self.backbone(dummy_input)
-            last_feature_map = features[-1] # Lấy tầng sâu nhất
+            last_feature_map = features[-1]
             out_channels = last_feature_map.shape[1]
-            H, W = last_feature_map.shape[2], last_feature_map.shape[3]
-            
-        print(f"-> Backbone Output Shape: {out_channels}x{H}x{W}")
         
-        # B. Lớp chuyển đổi (Adapter Layer)
-        # Hệ thống cũ của bạn (AttentionModule) đang chạy với input 512 channel (từ ResNet18)
-        # ConvNeXt ra 768/1024 channel -> Cần nén xuống 512
+        # Adapter: Nén channel về 512
         self.target_channels = 512
         self.adapter_conv = nn.Conv2d(out_channels, self.target_channels, kernel_size=1, bias=False)
         self.adapter_bn = nn.BatchNorm2d(self.target_channels)
         self.adapter_act = nn.PReLU(self.target_channels)
         
-        # C. Các module Attention (Logic cũ của bạn)
+        # Các module Attention
         self.spectacles_fsm = AttentionModule(channels=self.target_channels)
         self.facial_hair_fsm = AttentionModule(channels=self.target_channels)
         self.emotion_fsm = AttentionModule(channels=self.target_channels)
@@ -104,23 +91,24 @@ class MIConvNeXtV2(nn.Module):
         self.gender_fsm = AttentionModule(channels=self.target_channels)
 
     def forward(self, x):
-        # 1. Trích xuất đặc trưng từ ConvNeXt
-        # timm trả về list các feature map, ta lấy cái cuối cùng (xịn nhất)
+        # 1. Backbone
         features = self.backbone(x)[-1] 
         
-        # 2. Nén channel về 512 (Adapter)
+        # 2. Adapter
         x = self.adapter_conv(features)
         x = self.adapter_bn(x)
         x = self.adapter_act(x)
         
-        # 3. Chuỗi tách Feature (Logic cũ của MIResNet)
+        # 3. Tách Feature
         x_non_spectacles, x_spectacles = self.spectacles_fsm(x)
         x_non_facial_hair, x_facial_hair = self.facial_hair_fsm(x_non_spectacles)
-        x_non_emotion, x_emotion = self.facial_hair_fsm(x_non_facial_hair)
+        
+        # --- ĐÃ SỬA LỖI Ở ĐÂY (Dùng self.emotion_fsm) ---
+        x_non_emotion, x_emotion = self.emotion_fsm(x_non_facial_hair) 
+        
         x_non_pose, x_pose = self.pose_fsm(x_non_emotion)
         x_id, x_gender = self.gender_fsm(x_non_pose)
         
-        # 4. Trả về đúng format tuple mà MTLFaceRecognition yêu cầu
         return (
                 (x_spectacles, x_non_spectacles),
                 (x_facial_hair, x_non_facial_hair),
@@ -129,17 +117,5 @@ class MIConvNeXtV2(nn.Module):
                 (x_gender, x_id)
             )
 
-# --- 3. HÀM KHỞI TẠO ---
 def create_miconvnextv2(model_name='convnextv2_tiny', **kwargs):
-    # Hỗ trợ các phiên bản: atto, femto, pico, nano, tiny, base, large
-    # Khuyên dùng 'tiny' hoặc 'base' cho cân bằng hiệu năng/tốc độ
     return MIConvNeXtV2(model_name, **kwargs)
-
-if __name__ == '__main__':
-    # Test thử
-    model = create_miconvnextv2('convnextv2_tiny')
-    x = torch.randn(2, 3, 112, 112)
-    output = model(x)
-    print("Test Output Structure:")
-    print(f"Số lượng nhánh chính: {len(output)}")
-    print(f"Shape ID Feature: {output[-1][-1].shape}") # Mong đợi (2, 512, 7, 7)

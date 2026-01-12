@@ -4,11 +4,17 @@ import numpy as np
 import os
 import pandas as pd
 import cv2
-from typing import Tuple, List
 
-# --- 1. DATASET CHO SINGLE TASK (Giữ nguyên của bạn) ---
+# ==========================================
+# 1. BASE DATASET CLASSES
+# ==========================================
+
+# --- SINGLE TASK DATASET ---
 class PhotometricDataset(Dataset):
     def __init__(self, csv_file, root_dir, transform=None, type_mode='albedo'):
+        if not os.path.exists(csv_file):
+            alt_csv = os.path.join(os.path.dirname(csv_file), 'dataset', os.path.basename(csv_file))
+            if os.path.exists(alt_csv): csv_file = alt_csv
         self.df = pd.read_csv(csv_file)
         self.root_dir = root_dir
         self.transform = transform
@@ -17,17 +23,13 @@ class PhotometricDataset(Dataset):
             'albedo': 'albedo_map_new_crop.exr.npy',
             'normalmap': 'normal_map_new_crop.exr.npy',
             'depthmap': 'depth_map_new_crop.exr.npy',
-            'normal': 'normal_map_new_crop.exr.npy', # Alias
-            'depth': 'depth_map_new_crop.exr.npy'     # Alias
+            'normal': 'normal_map_new_crop.exr.npy',
+            'depth': 'depth_map_new_crop.exr.npy'
         }
         self.unique_ids = sorted(self.df['id'].unique())
         self.id_to_label = {id_val: i for i, id_val in enumerate(self.unique_ids)}
-        
-        self.labels_list = []
-        for _, row in self.df.iterrows():
-            self.labels_list.append(self.id_to_label[row['id']])
-            
-        self.weightclass = {} 
+        self.labels_list = [self.id_to_label[row['id']] for _, row in self.df.iterrows()]
+        self.weightclass = {}
 
     def __len__(self): return len(self.df)
     def get_labels(self): return self.labels_list
@@ -38,48 +40,43 @@ class PhotometricDataset(Dataset):
         session_name = row['session']
         file_suffix = self.file_map.get(self.type_mode, 'albedo_map_new_crop.exr.npy')
         file_path = os.path.join(self.root_dir, str(id_val), str(session_name), file_suffix)
-
         try:
             image_data = np.load(file_path)
             if image_data.ndim == 3 and image_data.shape[0] == 3:
                 image_data = image_data.transpose(1, 2, 0)
             image_data = image_data.astype(np.float32)
-        except Exception:
+        except:
             image_data = np.zeros((112, 112, 3), dtype=np.float32)
 
         label_id = self.id_to_label[id_val]
-        # Lấy nhãn phụ an toàn
         def get_lbl(key): return int(row.get(key, 0))
-        
-        labels = torch.tensor([
-            label_id, get_lbl('Gender'), get_lbl('Spectacles'), 
-            get_lbl('Facial_Hair'), get_lbl('Pose'), get_lbl('Emotion')
-        ], dtype=torch.long)
+        labels = torch.tensor([label_id, get_lbl('Gender'), get_lbl('Spectacles'), get_lbl('Facial_Hair'), get_lbl('Pose'), get_lbl('Emotion')], dtype=torch.long)
 
         if self.transform:
-            augmented = self.transform(image=image_data)
-            image_data = augmented['image']
+            res = self.transform(image=image_data)
+            image_data = res['image']
 
         if isinstance(image_data, np.ndarray):
             X = torch.from_numpy(image_data).permute(2, 0, 1)
-        else:
-            X = image_data
-
+        else: X = image_data
         return X, labels
 
-# --- 2. DATASET 3 NHÁNH (BỔ SUNG QUAN TRỌNG) ---
-class ThreeBranchDataset(Dataset):
+# --- CONCAT V2 DATASET (2 MODALITIES) ---
+class ConcatCustomExrDatasetV2(Dataset):
     def __init__(self, csv_file, root_dir, transform=None):
+        if not os.path.exists(csv_file):
+            alt_csv = os.path.join(os.path.dirname(csv_file), 'dataset', os.path.basename(csv_file))
+            if os.path.exists(alt_csv): csv_file = alt_csv
         self.df = pd.read_csv(csv_file)
         self.root_dir = root_dir
         self.transform = transform
-        
+
+        # Map filenames
         self.file_map = {
             'albedo': 'albedo_map_new_crop.exr.npy',
-            'normal': 'normal_map_new_crop.exr.npy',
-            'depth': 'depth_map_new_crop.exr.npy' 
+            'normal': 'normal_map_new_crop.exr.npy'
         }
-        
+
         self.unique_ids = sorted(self.df['id'].unique())
         self.id_to_label = {id_val: i for i, id_val in enumerate(self.unique_ids)}
         self.labels_list = [self.id_to_label[row['id']] for _, row in self.df.iterrows()]
@@ -91,11 +88,7 @@ class ThreeBranchDataset(Dataset):
         try:
             if not os.path.exists(path): return None
             img = np.load(path)
-            if img.ndim == 2: 
-                img = np.expand_dims(img, axis=-1)
-                img = np.repeat(img, 3, axis=-1)
-            elif img.ndim == 3 and img.shape[0] == 3: 
-                img = img.transpose(1, 2, 0)
+            if img.ndim == 3 and img.shape[0] == 3: img = img.transpose(1, 2, 0)
             return img.astype(np.float32)
         except: return None
 
@@ -103,49 +96,34 @@ class ThreeBranchDataset(Dataset):
         row = self.df.iloc[idx]
         id_val = row['id']
         session = str(row['session'])
-        
-        # Đường dẫn 3 file
-        p_alb = os.path.join(self.root_dir, str(id_val), session, self.file_map['albedo'])
-        p_nor = os.path.join(self.root_dir, str(id_val), session, self.file_map['normal'])
-        p_dep = os.path.join(self.root_dir, str(id_val), session, self.file_map['depth'])
-        
-        i_alb = self.__load_npy(p_alb)
-        i_nor = self.__load_npy(p_nor)
-        i_dep = self.__load_npy(p_dep)
-        
-        # Fallback
-        if i_alb is None: i_alb = np.zeros((112, 112, 3), dtype=np.float32)
-        h, w = i_alb.shape[:2]
-        
-        def fix_img(img):
-            if img is None: return np.zeros((h, w, 3), dtype=np.float32)
-            if img.shape[:2] != (h, w):
-                img = cv2.resize(img, (w, h)) # Resize cho khớp
-            return img
 
-        i_nor = fix_img(i_nor)
-        i_dep = fix_img(i_dep)
+        p1 = os.path.join(self.root_dir, str(id_val), session, self.file_map['albedo'])
+        p2 = os.path.join(self.root_dir, str(id_val), session, self.file_map['normal'])
 
-        # Labels
+        i1 = self.__load_npy(p1)
+        i2 = self.__load_npy(p2)
+
+        if i1 is None: i1 = np.zeros((112, 112, 3), dtype=np.float32)
+        if i2 is None: i2 = np.zeros((112, 112, 3), dtype=np.float32) # Fallback kích thước
+
+        # Resize if mismatch (Safe guard)
+        if i2.shape[:2] != i1.shape[:2]: i2 = cv2.resize(i2, (i1.shape[1], i1.shape[0]))
+
         label_id = self.id_to_label[id_val]
         def get_lbl(key): return int(row.get(key, 0))
-        
-        labels = torch.tensor([
-            label_id, get_lbl('Gender'), get_lbl('Spectacles'), 
-            get_lbl('Facial_Hair'), get_lbl('Pose'), get_lbl('Emotion')
-        ], dtype=torch.long)
+        labels = torch.tensor([label_id, get_lbl('Gender'), get_lbl('Spectacles'), get_lbl('Facial_Hair'), get_lbl('Pose'), get_lbl('Emotion')], dtype=torch.long)
 
-        # Augmentation 3 nhánh
         if self.transform:
-            res = self.transform(image=i_alb, image0=i_nor, image1=i_dep)
-            i_alb, i_nor, i_dep = res['image'], res['image0'], res['image1']
-            
-        # To Tensor
-        to_ts = lambda x: torch.from_numpy(x).permute(2, 0, 1) if isinstance(x, np.ndarray) else x
-        
-        return to_ts(i_alb), to_ts(i_nor), to_ts(i_dep), labels
+            res = self.transform(image=i1, image2=i2)
+            i1, i2 = res['image'], res['image2']
 
-# --- 3. CUSTOM SAMPLER (Giữ nguyên) ---
+        to_ts = lambda x: torch.from_numpy(x).permute(2, 0, 1) if isinstance(x, np.ndarray) else x
+
+        # Stack 2 ảnh: [2, C, H, W]
+        X = torch.stack((to_ts(i1), to_ts(i2)), dim=0)
+        return X, labels
+
+
 class UniqueIdBatchSampler(Sampler):
     def __init__(self, labels, batch_size):
         self.labels = np.array(labels)
@@ -153,43 +131,55 @@ class UniqueIdBatchSampler(Sampler):
         self.unique_labels = list(set(labels))
         self.label_indices = {l: [] for l in self.unique_labels}
         for idx, l in enumerate(self.labels): self.label_indices[l].append(idx)
-
     def __iter__(self):
         n_batches = len(self.labels) // self.batch_size
         for _ in range(n_batches):
             batch_labels = np.random.choice(self.unique_labels, size=self.batch_size, replace=False)
             batch_indices = [np.random.choice(self.label_indices[l]) for l in batch_labels]
             yield batch_indices
-
     def __len__(self): return len(self.labels) // self.batch_size
 
-# --- 4. DATA LOADER FACTORIES ---
+# --- SINGLE TASK LOADER ---
 def create_multitask_datafetcher(config, train_transform, test_transform):
-    # Hàm này dùng cho PhotometricDataset (cũ)
     dataset_dir = config['dataset_dir']
-    train_ds = PhotometricDataset(os.path.join(dataset_dir, 'train_split.csv'), dataset_dir, train_transform, config.get('type', 'albedo'))
-    test_ds = PhotometricDataset(os.path.join(dataset_dir, 'probe_split.csv'), dataset_dir, test_transform, config.get('type', 'albedo'))
-    
-    # Mặc định dùng Sampler
-    train_dl = DataLoader(train_ds, batch_sampler=UniqueIdBatchSampler(train_ds.get_labels(), config['batch_size']), num_workers=2)
+    train_csv = os.path.join(dataset_dir, 'train_split.csv')
+    if not os.path.exists(train_csv): train_csv = os.path.join(dataset_dir, 'dataset', 'train_split.csv')
+    test_csv = os.path.join(dataset_dir, 'probe_split.csv')
+    if not os.path.exists(test_csv): test_csv = os.path.join(dataset_dir, 'dataset', 'probe_split.csv')
+
+    train_ds = PhotometricDataset(train_csv, dataset_dir, train_transform, config.get('type', 'albedo'))
+    test_ds = PhotometricDataset(test_csv, dataset_dir, test_transform, config.get('type', 'albedo'))
+
+    use_sampler = config.get('use_sampler', False)
+    if use_sampler:
+        print(f">>> SingleLoader: MODE = PK SAMPLER")
+        train_dl = DataLoader(train_ds, batch_sampler=UniqueIdBatchSampler(train_ds.get_labels(), config['batch_size']), num_workers=2)
+    else:
+        print(f">>> SingleLoader: MODE = RANDOM SHUFFLE")
+        train_dl = DataLoader(train_ds, batch_size=config['batch_size'], shuffle=True, num_workers=2)
+
     test_dl = DataLoader(test_ds, batch_size=config['batch_size'], shuffle=False, num_workers=2)
     return train_dl, test_dl, train_ds.weightclass
 
-def create_three_branch_loader(conf, train_tf, test_tf, use_sampler=True):
-    # Hàm này dùng cho ThreeBranchDataset (Mới, dùng cho run_single_task.py)
-    train_csv = os.path.join(conf['dataset_dir'], 'train_split.csv')
-    test_csv = os.path.join(conf['dataset_dir'], 'gallery_split.csv') 
-    if not os.path.exists(test_csv): test_csv = os.path.join(conf['dataset_dir'], 'probe_split.csv')
+# --- CONCAT V2 LOADER (NEW - CÓ CÔNG TẮC) ---
+def create_concatv2_multitask_datafetcher(config, train_transform, test_transform):
+    dataset_dir = config['dataset_dir']
+    train_csv = os.path.join(dataset_dir, 'train_split.csv')
+    if not os.path.exists(train_csv): train_csv = os.path.join(dataset_dir, 'dataset', 'train_split.csv')
+    test_csv = os.path.join(dataset_dir, 'probe_split.csv')
+    if not os.path.exists(test_csv): test_csv = os.path.join(dataset_dir, 'dataset', 'probe_split.csv')
 
-    train_ds = ThreeBranchDataset(train_csv, conf['dataset_dir'], train_tf)
-    test_ds = ThreeBranchDataset(test_csv, conf['dataset_dir'], test_tf)
-    
+    # Dùng ConcatCustomExrDatasetV2 vừa định nghĩa
+    train_ds = ConcatCustomExrDatasetV2(train_csv, dataset_dir, train_transform)
+    test_ds = ConcatCustomExrDatasetV2(test_csv, dataset_dir, test_transform)
+
+    use_sampler = config.get('use_sampler', False)
     if use_sampler:
-        print("Dataloader: PK Sampler ACTIVATED")
-        train_loader = DataLoader(train_ds, batch_sampler=UniqueIdBatchSampler(train_ds.get_labels(), conf['batch_size']), num_workers=2)
+        print(f">>> ConcatV2Loader: MODE = PK SAMPLER")
+        train_dl = DataLoader(train_ds, batch_sampler=UniqueIdBatchSampler(train_ds.get_labels(), config['batch_size']), num_workers=2)
     else:
-        print("Dataloader: Random Shuffle ACTIVATED")
-        train_loader = DataLoader(train_ds, batch_size=conf['batch_size'], shuffle=True, num_workers=2)
-    
-    test_loader = DataLoader(test_ds, batch_size=conf['batch_size'], shuffle=False, num_workers=2)
-    return train_loader, test_loader
+        print(f">>> ConcatV2Loader: MODE = RANDOM SHUFFLE")
+        train_dl = DataLoader(train_ds, batch_size=config['batch_size'], shuffle=True, num_workers=2)
+
+    test_dl = DataLoader(test_ds, batch_size=config['batch_size'], shuffle=False, num_workers=2)
+    return train_dl, test_dl
