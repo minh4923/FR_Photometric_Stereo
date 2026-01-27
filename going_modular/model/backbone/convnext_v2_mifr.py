@@ -10,7 +10,7 @@ class SPPModule(nn.Module):
             pool_layer = nn.AdaptiveAvgPool2d
         elif pool_mode == 'max':
             pool_layer = nn.AdaptiveMaxPool2d
-        else:
+        else:   
             raise NotImplementedError
 
         self.pool_blocks = nn.ModuleList([
@@ -49,7 +49,7 @@ class AttentionModule(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x):
+    def forward(self, x):   
         channel_input = self.avg_spp(x) + self.max_spp(x)
         channel_scale = self.channel(channel_input)
 
@@ -61,29 +61,25 @@ class AttentionModule(nn.Module):
         
         return x_id, x_non_id
 
-# --- 2. BACKBONE CONVNEXT V2 ---
 class MIConvNeXtV2(nn.Module):
     def __init__(self, model_name='convnextv2_tiny', pretrained=True, **kwargs):
         super(MIConvNeXtV2, self).__init__()
         
-        print(f"--- Loading ConvNeXt V2: {model_name} (Pretrained={pretrained}) ---")
-        # features_only=True để lấy feature map cuối cùng
         self.backbone = timm.create_model(model_name, pretrained=pretrained, features_only=True)
         
-        # Lấy thông tin channel output thực tế
-        dummy_input = torch.randn(1, 3, 112, 112)
-        with torch.no_grad():
-            features = self.backbone(dummy_input)
-            last_feature_map = features[-1]
-            out_channels = last_feature_map.shape[1]
+       
+        # dummy_input = torch.randn(1, 3, 112, 112)
+        # with torch.no_grad():
+        #     features = self.backbone(dummy_input)
+        #     last_feature_map = features[-1]
+        #     out_channels = last_feature_map.shape[1]
         
-        # Adapter: Nén channel về 512
         self.target_channels = 512
         self.adapter_conv = nn.Conv2d(out_channels, self.target_channels, kernel_size=1, bias=False)
         self.adapter_bn = nn.BatchNorm2d(self.target_channels)
         self.adapter_act = nn.PReLU(self.target_channels)
         
-        # Các module Attention
+        
         self.spectacles_fsm = AttentionModule(channels=self.target_channels)
         self.facial_hair_fsm = AttentionModule(channels=self.target_channels)
         self.emotion_fsm = AttentionModule(channels=self.target_channels)
@@ -91,19 +87,18 @@ class MIConvNeXtV2(nn.Module):
         self.gender_fsm = AttentionModule(channels=self.target_channels)
 
     def forward(self, x):
-        # 1. Backbone
+      
         features = self.backbone(x)[-1] 
         
-        # 2. Adapter
+      
         x = self.adapter_conv(features)
         x = self.adapter_bn(x)
         x = self.adapter_act(x)
         
-        # 3. Tách Feature
         x_non_spectacles, x_spectacles = self.spectacles_fsm(x)
         x_non_facial_hair, x_facial_hair = self.facial_hair_fsm(x_non_spectacles)
         
-        # --- ĐÃ SỬA LỖI Ở ĐÂY (Dùng self.emotion_fsm) ---
+        
         x_non_emotion, x_emotion = self.emotion_fsm(x_non_facial_hair) 
         
         x_non_pose, x_pose = self.pose_fsm(x_non_emotion)

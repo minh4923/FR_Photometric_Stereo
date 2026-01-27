@@ -49,11 +49,7 @@ class AttentionModule(nn.Module):
         self.max_spp = SPPModule('max', pool_size)
         # Học ma trận attention theo spatial từ đầu vào: input (N,2,H,W), ouput (N,1,H,W) với giá trị xác xuất
         self.spatial = nn.Sequential(
-            # in_channels = 2: Max Pooling và Average Pooling theo chiều kênh
-            # out_channels = 1: Chỉ xuất ra một kênh, đại diện cho attention map không gian.
-            # Kích thước kernel bằng 7 để học các mối quan hệ không gian cục bộ.
-            # padding=(kernel_size - 1) // 2: Sử dụng padding để giữ nguyên kích thước chiều cao và chiều rộng của đầu ra.
-            # bias=False: Không sử dụng bias vì có Batch Normalization xử lý phía sau.
+           
             nn.Conv2d(2, 1, kernel_size=kernel_size, stride=1, padding=(kernel_size - 1) // 2,
                       dilation=1, groups=1, bias=False),
             # Chuẩn hóa giá trị đầu ra của Conv2d theo từng batch, để tăng tốc độ huấn luyện và tính ổn định.

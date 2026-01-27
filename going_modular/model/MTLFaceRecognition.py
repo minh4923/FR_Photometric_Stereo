@@ -21,12 +21,12 @@ class MTLFaceRecognition(torch.nn.Module):
     def __init__(self, backbone:str, num_classes:int):
         super(MTLFaceRecognition, self).__init__()
         
-        # Logic chọn Backbone
+        # Backbone
         if 'convnext' in backbone:
-             # Nếu tên backbone là 'convnextv2_tiny'
+            
             self.backbone = create_miconvnextv2(backbone)
         else:
-             # Logic cũ cho miresnet
+            
             from .backbone.mifr import create_miresnet
             self.backbone = create_miresnet(backbone)
         
@@ -38,7 +38,7 @@ class MTLFaceRecognition(torch.nn.Module):
         self.pose_head = PoseDetectModule()
         self.spectacles_head = SpectacleDetectModule()
         
-        # da_discriminator (domain adaptation)
+        # 
         self.da_gender_head = GenderDetectModule()
         self.da_emotion_head = EmotionDetectModule()
         self.da_facial_hair_head = FacialHairDetectModule()
@@ -106,7 +106,7 @@ class MTLFaceRecognition(torch.nn.Module):
         return x_id, x_gender, x_pose, x_emotion, x_facial_hair, x_spectacles
 
 
-    # Các embedding là 512 neutron
+    
     def get_embedding(self, x):
         (
             (x_spectacles, x_non_spectacles),

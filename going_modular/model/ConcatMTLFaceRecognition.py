@@ -75,8 +75,7 @@ class ConcatMTLFaceRecognitionV3(torch.nn.Module):
         x_albedo_spectacles, x_albedo_facial_hair, x_albedo_pose, x_albedo_emotion, x_albedo_gender, x_albedo_id = self.mtl_albedo.get_embedding(x_albedo)
         
         x_depthmap_spectacles, x_depthmap_facial_hair, x_depthmap_pose, x_depthmap_emotion, x_depthmap_gender, x_depthmap_id = self.mtl_depthmap.get_embedding(x_depthmap)
-            
-        # Concatenate embeddings from all modalities (normalmap, albedo, depthmap)
+       
         spectacles_embedding = torch.cat([x_normalmap_spectacles, x_albedo_spectacles, x_depthmap_spectacles], dim=1)
         facial_hair_embedding = torch.cat([x_normalmap_facial_hair, x_albedo_facial_hair, x_depthmap_facial_hair], dim=1)
         pose_embedding = torch.cat([x_normalmap_pose, x_albedo_pose, x_depthmap_pose], dim=1)
@@ -152,8 +151,7 @@ class ConcatMTLFaceRecognitionV2(torch.nn.Module):
         x_backbone1_spectacles, x_backbone1_facial_hair, x_backbone1_pose, x_backbone1_emotion, x_backbone1_gender, x_backbone1_id = self.mtl_backbone1.get_embedding(x_backbone1)
         
         x_backbone2_spectacles, x_backbone2_facial_hair, x_backbone2_pose, x_backbone2_emotion, x_backbone2_gender, x_backbone2_id = self.mtl_backbone2.get_embedding(x_backbone2)
-        
-        # Concatenate embeddings from all modalities (normalmap, albedo, depthmap)
+       
         spectacles_embedding = torch.cat([x_backbone1_spectacles, x_backbone2_spectacles], dim=1)
         facial_hair_embedding = torch.cat([x_backbone1_facial_hair, x_backbone2_facial_hair], dim=1)
         pose_embedding = torch.cat([x_backbone1_pose, x_backbone2_pose], dim=1)

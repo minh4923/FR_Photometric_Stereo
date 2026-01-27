@@ -12,12 +12,12 @@ class GaussianNoise(A.ImageOnlyTransform):
 
     def __call__(self, **kwargs):
         row, col, ch = kwargs['image'].shape
-        # Tính toán kích thước của vùng ảnh sẽ nhận nhiễu
+        #
         min_size = int(row * col * 0.1)
         max_size = int(row * col * 0.25)
         area_size = np.random.randint(min_size, max_size)
 
-        # Tạo ma trận mask để chỉ định vùng của ảnh sẽ nhận nhiễu
+       
         mask = np.zeros((row, col), dtype=np.float32)
         x = np.random.randint(0, col)
         y = np.random.randint(0, row)
@@ -25,14 +25,13 @@ class GaussianNoise(A.ImageOnlyTransform):
         y_end = min(y + int(np.sqrt(area_size)), row)
         mask[y:y_end, x:x_end] = 1
         
-        # Tạo ma trận nhiễu Gaussian có std ngẫu nhiên
+    
         std = np.random.uniform(0, 0.1)
         gauss = np.random.normal(self.mean, std, (row, col, ch)).astype(np.float32)
         
-        # Tiến hành transform trên tất cả các ảnh (chính và bổ sung)
+       
         result = {}
 
-        # Lặp qua tất cả các target (ảnh chính và các ảnh bổ sung)
         for key, image in kwargs.items():
             # Áp dụng nhiễu vào phần của ảnh được chỉ định bởi mask
             noisy_img = (image + gauss * mask[:, :, np.newaxis]).astype(np.float32)

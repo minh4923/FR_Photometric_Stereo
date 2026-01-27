@@ -5,11 +5,6 @@ import os
 import pandas as pd
 import cv2
 
-# ==========================================
-# 1. BASE DATASET CLASSES
-# ==========================================
-
-# --- SINGLE TASK DATASET ---
 class PhotometricDataset(Dataset):
     def __init__(self, csv_file, root_dir, transform=None, type_mode='albedo'):
         if not os.path.exists(csv_file):
@@ -23,8 +18,7 @@ class PhotometricDataset(Dataset):
             'albedo': 'albedo_map_new_crop.exr.npy',
             'normalmap': 'normal_map_new_crop.exr.npy',
             'depthmap': 'depth_map_new_crop.exr.npy',
-            'normal': 'normal_map_new_crop.exr.npy',
-            'depth': 'depth_map_new_crop.exr.npy'
+        
         }
         self.unique_ids = sorted(self.df['id'].unique())
         self.id_to_label = {id_val: i for i, id_val in enumerate(self.unique_ids)}
@@ -61,7 +55,7 @@ class PhotometricDataset(Dataset):
         else: X = image_data
         return X, labels
 
-# --- CONCAT V2 DATASET (2 MODALITIES) ---
+
 class ConcatCustomExrDatasetV2(Dataset):
     def __init__(self, csv_file, root_dir, transform=None):
         if not os.path.exists(csv_file):
@@ -104,9 +98,9 @@ class ConcatCustomExrDatasetV2(Dataset):
         i2 = self.__load_npy(p2)
 
         if i1 is None: i1 = np.zeros((112, 112, 3), dtype=np.float32)
-        if i2 is None: i2 = np.zeros((112, 112, 3), dtype=np.float32) # Fallback kích thước
+        if i2 is None: i2 = np.zeros((112, 112, 3), dtype=np.float32) #
 
-        # Resize if mismatch (Safe guard)
+        
         if i2.shape[:2] != i1.shape[:2]: i2 = cv2.resize(i2, (i1.shape[1], i1.shape[0]))
 
         label_id = self.id_to_label[id_val]
@@ -119,7 +113,7 @@ class ConcatCustomExrDatasetV2(Dataset):
 
         to_ts = lambda x: torch.from_numpy(x).permute(2, 0, 1) if isinstance(x, np.ndarray) else x
 
-        # Stack 2 ảnh: [2, C, H, W]
+   
         X = torch.stack((to_ts(i1), to_ts(i2)), dim=0)
         return X, labels
 
@@ -139,7 +133,7 @@ class UniqueIdBatchSampler(Sampler):
             yield batch_indices
     def __len__(self): return len(self.labels) // self.batch_size
 
-# --- SINGLE TASK LOADER ---
+
 def create_multitask_datafetcher(config, train_transform, test_transform):
     dataset_dir = config['dataset_dir']
     train_csv = os.path.join(dataset_dir, 'train_split.csv')
@@ -161,7 +155,7 @@ def create_multitask_datafetcher(config, train_transform, test_transform):
     test_dl = DataLoader(test_ds, batch_size=config['batch_size'], shuffle=False, num_workers=2)
     return train_dl, test_dl, train_ds.weightclass
 
-# --- CONCAT V2 LOADER (NEW - CÓ CÔNG TẮC) ---
+
 def create_concatv2_multitask_datafetcher(config, train_transform, test_transform):
     dataset_dir = config['dataset_dir']
     train_csv = os.path.join(dataset_dir, 'train_split.csv')
@@ -169,7 +163,7 @@ def create_concatv2_multitask_datafetcher(config, train_transform, test_transfor
     test_csv = os.path.join(dataset_dir, 'probe_split.csv')
     if not os.path.exists(test_csv): test_csv = os.path.join(dataset_dir, 'dataset', 'probe_split.csv')
 
-    # Dùng ConcatCustomExrDatasetV2 vừa định nghĩa
+  
     train_ds = ConcatCustomExrDatasetV2(train_csv, dataset_dir, train_transform)
     test_ds = ConcatCustomExrDatasetV2(test_csv, dataset_dir, test_transform)
 

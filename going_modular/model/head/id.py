@@ -34,11 +34,8 @@ class MagLinear(torch.nn.Module):
         return margin
     
     def forward(self, x):
-        # normalize lại để tính cosine ổn định
-        # clamp(min, max) giới hạn giá trị trong tensor sao cho tất cả các phần tử nhỏ hơn min sẽ được thay thế bằng min, và tất cả các phần tử lớn hơn max sẽ được thay thế bằng max.
+       
         x_norm = torch.norm(x, dim=1, keepdim=True).clamp(self.l_a, self.u_a)
-        
-        # adaptive margin
         ada_margin = self._margin(x_norm)
         
         cos_m, sin_m = torch.cos(ada_margin), torch.sin(ada_margin)

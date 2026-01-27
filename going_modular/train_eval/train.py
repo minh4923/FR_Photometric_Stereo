@@ -58,7 +58,7 @@ def fit(
             train_loss_spectacles, train_loss_da_spectacles
         ) = train_epoch(train_dataloader, model, criterion, optimizer, device)
         
-        # 2. TEST
+    
         (   
             test_loss_gender, test_loss_da_gender,
             test_loss_emotion, test_loss_da_emotion,
@@ -92,9 +92,9 @@ def fit(
         writer.add_scalar('Loss/train', train_loss, epoch+1)
         writer.add_scalars('Loss/gender', {'train': train_loss_gender, 'test': test_loss_gender}, epoch+1)
         writer.add_scalars('AUC/id_cosine', {'train': train_id_cosine_auc, 'test': test_id_cosine_auc}, epoch+1)
-        # (Có thể thêm các add_scalars khác nếu cần, nhưng file này tập trung vào bảng hiển thị)
+      
 
-        # --- 4. METRICS DICT (FULL - ĐỂ HIỆN BẢNG KHÔNG BỊ LỖI) ---
+        
         train_metrics = {
             "loss": train_loss,
             "loss_id": train_loss_id,
@@ -150,8 +150,7 @@ def fit(
         # GHI LOG VÀO FILE
         log_full = {**train_metrics, **test_metrics}
         manager.log_metrics(epoch+1, log_full)
-        
-        # CHECKPOINT (Quan trọng: Truyền test_metrics để lưu Best Model)
+       
         model_checkpoint(model, optimizer, epoch + 1, test_metrics, scheduler)
         
         # Scheduler Step
