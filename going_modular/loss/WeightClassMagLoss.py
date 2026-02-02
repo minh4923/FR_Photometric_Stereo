@@ -29,16 +29,14 @@ class WeightClassMagLoss(torch.nn.Module):
         total_samples = label_counts.sum()
         
         # Tính tần suất ngược
-        alpha = 1 - (label_counts.values / total_samples)
+        alpha = 1 - (label_counts.values / total_samples) # class nhieu mau -> alpha nho , it mau -> alpha lon
         
         # Chuẩn hóa alpha về khoảng [0, 1]
         alpha = (alpha - alpha.min()) / (alpha.max() - alpha.min() + 1e-8)
         
-        # Giới hạn alpha trong khoảng [0.3, 1]
         min_alpha, max_alpha = 0.3, 1
         alpha = alpha * (max_alpha - min_alpha) + min_alpha
         
-        # Chuyển alpha thành tensor
         return torch.tensor(alpha, dtype=torch.float32)
     
     
@@ -72,34 +70,3 @@ class WeightClassMagLoss(torch.nn.Module):
         loss = torch.mean((loss_id + self.lambda_g * loss_g) * alpha)
         return loss
     
-if __name__ == '__main__':
-    file_path = "../../Dataset/train_set.csv"
-
-    # Tạo đối tượng lớp WeightClassMagLoss
-    loss_function = WeightClassMagLoss(
-        l_a=10,
-        u_a=110,
-        scale=64,
-        lambda_g=0.5,
-        file_path=file_path
-    )
-
-    # Logits giả lập
-    batch_size = 2
-    num_classes = 3
-
-    # Giả sử đầu ra của mô hình (cos(theta) và cos(theta + m))
-    cos_theta = torch.tensor([[0.8, 0.1, 0.1], [0.2, 0.7, 0.1]], dtype=torch.float32)
-    cos_theta_m = torch.tensor([[0.75, 0.05, 0.05], [0.15, 0.65, 0.1]], dtype=torch.float32)
-
-    # Nhãn thực tế
-    target = torch.tensor([0, 1], dtype=torch.long)
-
-    # Giá trị x_norm giả lập (độ lớn của đặc trưng)
-    x_norm = torch.tensor([15.0, 20.0], dtype=torch.float32)
-
-    # Tính loss
-    loss = loss_function((cos_theta, cos_theta_m), target, x_norm)
-
-    print(f"Loss: {loss.item()}")
-    print(loss_function.alpha)

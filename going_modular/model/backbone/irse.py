@@ -225,7 +225,7 @@ class iResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        x = self.conv1(x)
+        x = self.conv1(x) 
         x = self.bn1(x)
         x = self.prelu(x)
 

@@ -13,9 +13,9 @@ class ConcatMultiTaskLoss(torch.nn.Module):
         super(ConcatMultiTaskLoss, self).__init__()
         
         self.id_loss = WeightClassMagLoss(metadata_path)
-        # 0: female (235), 1: male (2579)
+      
         self.gender_loss = FocalLoss(alpha_weights={0:0.916, 1:0.084}, gamma_weights={0:2, 1:0}, num_classes=2)
-        # 0: không đeo kính (2026), 1: đeo kính (788)
+      
         self.spectacles_loss = FocalLoss(alpha_weights={0: 0.28, 1: 0.72}, gamma_weights={0:0, 1:1}, num_classes=2)
         # 0: không râu (1965), 1: có râu (849)
         self.facial_hair_loss = FocalLoss(alpha_weights={0:0.3, 1:0.7}, gamma_weights={0:0, 1:1}, num_classes=2)
