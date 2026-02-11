@@ -71,35 +71,4 @@ class FocalLoss(torch.nn.Module):
         # Trả về trung bình của Focal Loss trong batch
         return focal_loss.mean()
 
-    
-if __name__ == '__main__':
-    # batch_size = 4
-    # num_classes = 3
-    # y_pred = torch.tensor([[2.0, 1.0, 0.1],  # Logits cho mẫu 1
-    #                     [0.5, 2.5, 0.3],  # Logits cho mẫu 2
-    #                     [1.0, 0.2, 3.0],  # Logits cho mẫu 3
-    #                     [0.3, 0.7, 1.5]]) # Logits cho mẫu 4
-    # y_true = torch.tensor([0, 1, 2, 1])  # Nhãn thực của batch
-
-    file_path = '../../../Dataset/train_set.csv'
-    # gamma_weights = {0: 2.0, 1: 2.0, 2: 2.0}
-
-    # focal_loss = FocalLoss(file_path=file_path, label_name="Pose", gamma_weights=gamma_weights)
-
-    # # Tính Focal Loss
-    # loss = focal_loss(y_pred, y_true)
-    # print(f"Focal Loss: {loss.item()}")
-    
-    # Tốt không cần chỉnh
-    # Gender: tensor([0.9160, 0.0840])
-    # Facial_Hair: tensor([0.2989, 0.7011])
-    # Spectacles: tensor([0.2770, 0.7230])
-    
-    # Cần cải thiện
-    # Emotion: tensor([0.2316, 0.9124, 0.8560])
-    # Pose: tensor([0.1414, 0.8858, 0.9729])
-    # Occlusion: tensor([0.9963, 0.9828, 0.0209])
-    
-    focal_loss = FocalLoss(file_path=file_path, label_name="Pose")
-    print(focal_loss.alpha)
-    
+ 

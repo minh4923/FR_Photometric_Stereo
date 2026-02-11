@@ -17,11 +17,11 @@ class ConcatMultiTaskLoss(torch.nn.Module):
         self.gender_loss = FocalLoss(alpha_weights={0:0.916, 1:0.084}, gamma_weights={0:2, 1:0}, num_classes=2)
       
         self.spectacles_loss = FocalLoss(alpha_weights={0: 0.28, 1: 0.72}, gamma_weights={0:0, 1:1}, num_classes=2)
-        # 0: không râu (1965), 1: có râu (849)
+
         self.facial_hair_loss = FocalLoss(alpha_weights={0:0.3, 1:0.7}, gamma_weights={0:0, 1:1}, num_classes=2)
-        # 0: nhìn trực diện (2740), 1: nhìn nghiêng 1 chút (74)
+    
         self.pose_loss = FocalLoss(alpha_weights={0: 0.0263, 1: 0.9737}, gamma_weights={0:0, 1:2.5}, num_classes=2)
-        # 0: nhìn trực diện (2162), 1: các cảm xúc khác (652)
+     
         self.emotion_loss = FocalLoss(alpha_weights={0:0.232, 1:0.768}, gamma_weights={0:0, 1:1}, num_classes=2)
         
         # hyper parameter
