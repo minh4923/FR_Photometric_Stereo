@@ -6,11 +6,14 @@ import pandas as pd
 import cv2
 
 class PhotometricDataset(Dataset):
-    def __init__(self, csv_file, root_dir, transform=None, type_mode='albedo'):
-        if not os.path.exists(csv_file):
-            alt_csv = os.path.join(os.path.dirname(csv_file), 'dataset', os.path.basename(csv_file))
-            if os.path.exists(alt_csv): csv_file = alt_csv
-        self.df = pd.read_csv(csv_file)
+    def __init__(self, csv_file=None, root_dir=None, transform=None, type_mode='albedo', df=None):
+        if df is not None:
+            self.df = df.copy()
+        else:
+            if not os.path.exists(csv_file):
+                alt_csv = os.path.join(os.path.dirname(csv_file), 'dataset', os.path.basename(csv_file))
+                if os.path.exists(alt_csv): csv_file = alt_csv
+            self.df = pd.read_csv(csv_file)
         self.root_dir = root_dir
         self.transform = transform
         self.type_mode = type_mode
@@ -57,11 +60,14 @@ class PhotometricDataset(Dataset):
 
 
 class ConcatCustomExrDatasetV2(Dataset):
-    def __init__(self, csv_file, root_dir, transform=None):
-        if not os.path.exists(csv_file):
-            alt_csv = os.path.join(os.path.dirname(csv_file), 'dataset', os.path.basename(csv_file))
-            if os.path.exists(alt_csv): csv_file = alt_csv
-        self.df = pd.read_csv(csv_file)
+    def __init__(self, csv_file=None, root_dir=None, transform=None, df=None):
+        if df is not None:
+            self.df = df.copy()
+        else:
+            if not os.path.exists(csv_file):
+                alt_csv = os.path.join(os.path.dirname(csv_file), 'dataset', os.path.basename(csv_file))
+                if os.path.exists(alt_csv): csv_file = alt_csv
+            self.df = pd.read_csv(csv_file)
         self.root_dir = root_dir
         self.transform = transform
 
@@ -138,11 +144,19 @@ def create_multitask_datafetcher(config, train_transform, test_transform):
     dataset_dir = config['dataset_dir']
     train_csv = os.path.join(dataset_dir, 'train_split.csv')
     if not os.path.exists(train_csv): train_csv = os.path.join(dataset_dir, 'dataset', 'train_split.csv')
-    test_csv = os.path.join(dataset_dir, 'probe_split.csv')
-    if not os.path.exists(test_csv): test_csv = os.path.join(dataset_dir, 'dataset', 'probe_split.csv')
 
     train_ds = PhotometricDataset(train_csv, dataset_dir, train_transform, config.get('type', 'albedo'))
-    test_ds = PhotometricDataset(test_csv, dataset_dir, test_transform, config.get('type', 'albedo'))
+
+    probe_csv = os.path.join(dataset_dir, 'probe_split.csv')
+    if not os.path.exists(probe_csv): probe_csv = os.path.join(dataset_dir, 'dataset', 'probe_split.csv')
+    gallery_csv = os.path.join(dataset_dir, 'gallery_split.csv')
+    if not os.path.exists(gallery_csv): gallery_csv = os.path.join(dataset_dir, 'dataset', 'gallery_split.csv')
+
+    if os.path.exists(probe_csv) and os.path.exists(gallery_csv):
+        test_df = pd.concat([pd.read_csv(gallery_csv), pd.read_csv(probe_csv)], ignore_index=True)
+        test_ds = PhotometricDataset(root_dir=dataset_dir, transform=test_transform, type_mode=config.get('type', 'albedo'), df=test_df)
+    else:
+        test_ds = PhotometricDataset(probe_csv, dataset_dir, test_transform, config.get('type', 'albedo'))
 
     use_sampler = config.get('use_sampler', False)
     if use_sampler:
@@ -160,12 +174,19 @@ def create_concatv2_multitask_datafetcher(config, train_transform, test_transfor
     dataset_dir = config['dataset_dir']
     train_csv = os.path.join(dataset_dir, 'train_split.csv')
     if not os.path.exists(train_csv): train_csv = os.path.join(dataset_dir, 'dataset', 'train_split.csv')
-    test_csv = os.path.join(dataset_dir, 'probe_split.csv')
-    if not os.path.exists(test_csv): test_csv = os.path.join(dataset_dir, 'dataset', 'probe_split.csv')
+
+    probe_csv = os.path.join(dataset_dir, 'probe_split.csv')
+    if not os.path.exists(probe_csv): probe_csv = os.path.join(dataset_dir, 'dataset', 'probe_split.csv')
+    gallery_csv = os.path.join(dataset_dir, 'gallery_split.csv')
+    if not os.path.exists(gallery_csv): gallery_csv = os.path.join(dataset_dir, 'dataset', 'gallery_split.csv')
 
   
     train_ds = ConcatCustomExrDatasetV2(train_csv, dataset_dir, train_transform)
-    test_ds = ConcatCustomExrDatasetV2(test_csv, dataset_dir, test_transform)
+    if os.path.exists(probe_csv) and os.path.exists(gallery_csv):
+        test_df = pd.concat([pd.read_csv(gallery_csv), pd.read_csv(probe_csv)], ignore_index=True)
+        test_ds = ConcatCustomExrDatasetV2(root_dir=dataset_dir, transform=test_transform, df=test_df)
+    else:
+        test_ds = ConcatCustomExrDatasetV2(probe_csv, dataset_dir, test_transform)
 
     use_sampler = config.get('use_sampler', False)
     if use_sampler:
